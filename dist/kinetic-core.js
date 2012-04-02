@@ -1935,7 +1935,7 @@ Kinetic.GlobalObject.extend(Kinetic.Group, Kinetic.Node);
  */
 Kinetic.Shape = function(config) {
     this.className = 'Shape';
-    this.data = [];
+    this.data = {};
 
     // defaults
     if(config.stroke !== undefined || config.strokeWidth !== undefined) {
@@ -2068,23 +2068,60 @@ Kinetic.Shape.prototype = {
      */
     save: function() {
         var stage = this.getStage();
-        var w = stage.width;
-        var h = stage.height;
-
         var bufferLayer = stage.bufferLayer;
         var bufferLayerContext = bufferLayer.getContext();
-
+        
+        
         bufferLayer.clear();
         this._draw(bufferLayer);
+        
+        //maybe a call a function like getAbsoluteBoundingBox()
+        var m= this.getAbsoluteTransform();
+        //find transformed corners and bounding box
+        var p1 = m.multiplyPoint(0,0);
+        var p2 = m.multiplyPoint(this.width,0);
+        var p3 = m.multiplyPoint(0,this.height);
+        var p4 = m.multiplyPoint(this.width,this.height);
+        var x1=Math.floor(Math.min(p1.x,p2.x,p3.x,p4.x));
+        var x2=Math.floor(Math.max(p1.x,p2.x,p3.x,p4.x));
+        var y1=Math.floor(Math.min(p1.y,p2.y,p3.y,p4.y));
+        var y2=Math.floor(Math.max(p1.y,p2.y,p3.y,p4.y));
+        var w=x2-x1
+        var h=y2-y1;
 
-        var imageData = bufferLayerContext.getImageData(0, 0, w, h);
-        this.data = imageData.data;
+        
+        //cache shape first drawing matrix
+        this.dataMatrix=m;
+        //a bug when x1 or y1 is negative, we can't draw shape completely on bufferLayer because 
+        //bufferLayer x/y starts 0. 
+        //Maybe we translate bufferLayer context after drawing.
+        //for performance we get only needed imagedata
+        var imageData = bufferLayerContext.getImageData(x1, y1, w , h);
+        this.data = {
+            imageData:[],
+            w:w,
+            h:h,
+            x:x1,
+            y:y1
+        }; 
+        //optimize image data array
+        var pix = imageData.data;
+        for (var i = 0, n = pix.length; i < n; i += 4) {
+            //OPTIMIZE: math.floor vs bitwise http://jsperf.com/math-floor-vs-bitwise
+            //var row=~~((i/4)/width);
+            var row = Math.floor((i / 4) / w);
+            if(!this.data.imageData[row])
+                this.data.imageData[row]=[];
+            var column = (i / 4) - (row * w);
+            this.data.imageData[row][column]=pix[i + 3] == 0 ? 0 : 1;
+                        
+        } 
     },
     /**
      * draw shape
      * @param {Layer} layer Layer that the shape will be drawn on
      */
-    _draw: function(layer) {
+    _draw: function(layer,noTransform) {
         if(this.visible) {
             var stage = layer.getStage();
             var context = layer.getContext();
@@ -2102,7 +2139,7 @@ Kinetic.Shape.prototype = {
                 var node = family[n];
                 var m = node.getTransform().getMatrix();
                 context.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-
+                
                 if(node.getAbsoluteAlpha() !== 1) {
                     context.globalAlpha = node.getAbsoluteAlpha();
                 }
@@ -2128,9 +2165,27 @@ Kinetic.Shape.prototype = {
             return pathLayerContext.isPointInPath(pos.x, pos.y);
         }
         else {
-            var w = stage.width;
-            var alpha = this.data[((w * pos.y) + pos.x) * 4 + 3];
-            return (alpha !== undefined && alpha !== 0);
+            //get current absolute transform matrix
+            var m=this.getAbsoluteTransform();
+            //invert matrix
+            m.invert();
+            //convert point to default state
+            pos = m.multiplyPoint(pos.x,pos.y);
+            //convert point to shape first drawing state
+            pos =this.dataMatrix.multiplyPoint(pos.x,pos.y);
+            // math.floor vs bitwise performance http://jsperf.com/math-floor-vs-bitwise
+            //var row=~~((i/4)/width);
+            //maybe use bitwise for performance 
+            pos={
+                x:Math.floor(pos.x-this.data.x),
+                y:Math.floor(pos.y-this.data.y)
+            }
+            
+            if(pos.x >= 0 && pos.y >=0 && this.data.w > pos.x && this.data.h > pos.y){
+            	var i=this.data.imageData[pos.y][pos.x];
+           	    return i;
+            }  
+            else return false;
         }
     }
 };
@@ -2916,10 +2971,19 @@ Kinetic.Transform.prototype = {
         this.m[5] = m5;
     },
     /**
+     * Multiply a point
+     * @returns {Object} 2D point(x, y)
+     */
+    multiplyPoint: function(x, y) {
+		return {
+		    x: this.m[0] * x + this.m[2] * y + this.m[4], 
+		    y: this.m[1] * x + this.m[3] * y + this.m[5]
+		}; 
+	},
+    /**
      * return matrix
      */
     getMatrix: function() {
         return this.m;
     }
 };
-
