@@ -2075,40 +2075,39 @@ Kinetic.Shape.prototype = {
         bufferLayer.clear();
         this._draw(bufferLayer);
         
-        //maybe a call a function like getAbsoluteBoundingBox()
+        /* 
+         * TODO: maybe a call a function like getAbsoluteBoundingBox()
+         * Also need to implement getHeight and getWidth methods for each Shape
+         * object
+        */
         var m= this.getAbsoluteTransform();
         //find transformed corners and bounding box
+        var w=this.getWidth();var h=this.getHeight();
         var p1 = m.multiplyPoint(0,0);
-        var p2 = m.multiplyPoint(this.width,0);
-        var p3 = m.multiplyPoint(0,this.height);
-        var p4 = m.multiplyPoint(this.width,this.height);
+        var p2 = m.multiplyPoint(w,0);
+        var p3 = m.multiplyPoint(0,h);
+        var p4 = m.multiplyPoint(w,h);
         var x1=Math.floor(Math.min(p1.x,p2.x,p3.x,p4.x));
         var x2=Math.floor(Math.max(p1.x,p2.x,p3.x,p4.x));
         var y1=Math.floor(Math.min(p1.y,p2.y,p3.y,p4.y));
         var y2=Math.floor(Math.max(p1.y,p2.y,p3.y,p4.y));
-        var w=x2-x1
-        var h=y2-y1;
-
+        w=x2-x1
+        h=y2-y1;
         
-        //cache shape first drawing matrix
-        this.dataMatrix=m;
-        //a bug when x1 or y1 is negative, we can't draw shape completely on bufferLayer because 
-        //bufferLayer x/y starts 0. 
-        //Maybe we translate bufferLayer context after drawing.
-        //for performance we get only needed imagedata
-        var imageData = bufferLayerContext.getImageData(x1, y1, w , h);
-        this.data = {
+		this.data = {
             imageData:[],
-            w:w,
-            h:h,
             x:x1,
             y:y1
         }; 
-        //optimize image data array
+        //for performance we get only needed imagedata http://jsperf.com/getimagedata-performance/3
+        var imageData = bufferLayerContext.getImageData(x1, y1, w , h);
+        
+        //minimize image data array
         var pix = imageData.data;
         for (var i = 0, n = pix.length; i < n; i += 4) {
             //OPTIMIZE: math.floor vs bitwise http://jsperf.com/math-floor-vs-bitwise
             //var row=~~((i/4)/width);
+            //Maybe use bitwise
             var row = Math.floor((i / 4) / w);
             if(!this.data.imageData[row])
                 this.data.imageData[row]=[];
@@ -2165,26 +2164,11 @@ Kinetic.Shape.prototype = {
             return pathLayerContext.isPointInPath(pos.x, pos.y);
         }
         else {
-            //get current absolute transform matrix
-            var m=this.getAbsoluteTransform();
-            //invert matrix
-            m.invert();
-            //convert point to default state
-            pos = m.multiplyPoint(pos.x,pos.y);
-            //convert point to shape first drawing state
-            pos =this.dataMatrix.multiplyPoint(pos.x,pos.y);
-            // math.floor vs bitwise performance http://jsperf.com/math-floor-vs-bitwise
-            //var row=~~((i/4)/width);
-            //maybe use bitwise for performance 
-            pos={
-                x:Math.floor(pos.x-this.data.x),
-                y:Math.floor(pos.y-this.data.y)
+            var x=pos.x-this.data.x;
+            var y=pos.y-this.data.y;
+            if(this.data.imageData[y]){
+            	return this.data.imageData[y][x]; 
             }
-            
-            if(pos.x >= 0 && pos.y >=0 && this.data.w > pos.x && this.data.h > pos.y){
-            	var i=this.data.imageData[pos.y][pos.x];
-           	    return i;
-            }  
             else return false;
         }
     }
