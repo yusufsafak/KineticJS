@@ -2120,7 +2120,7 @@ Kinetic.Shape.prototype = {
      * draw shape
      * @param {Layer} layer Layer that the shape will be drawn on
      */
-    _draw: function(layer,noTransform) {
+    _draw: function(layer) {
         if(this.visible) {
             var stage = layer.getStage();
             var context = layer.getContext();
