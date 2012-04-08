@@ -2064,6 +2064,43 @@ Kinetic.Shape.prototype = {
         this.drawFunc = func;
     },
     /**
+     * get Bounding Box without transform
+     * return Bounding box object:
+     * {
+     *     x: (number) top left corner x
+     *     y: (number) top left corner y
+     *     width: (number) width
+     *     height: (number) height
+     * }
+    **/
+    getBBox: function(func) {
+        var position=this.getPosition();
+        var size=this.getSize();
+        return { x:position.x , y:position.y, width: size.width, height: size.height };
+    },
+    /**
+     * get Bounding Box relative to stage
+     * return Absolute Bounding box object:
+     * {
+     *     x: (number) top left corner x
+     *     y: (number) top left corner y
+     *     width: (number) width
+     *     height: (number) height
+     * }
+    **/
+    getAbsoluteBBox: function(){
+        var box=this.getBBox();
+        var m= this.getAbsoluteTransform();
+        return m.multiplyBounds({ x:box.x -this.x , y:box.y-this.y, width: box.width, height: box.height });
+    },
+    /**
+     * reset shape size for non rectangular shapes 
+     */
+    _resetSize: function(){
+        this.width=0;
+        this.height=0;
+    },
+    /**
      * save shape data when using pixel detection. 
      */
     save: function() {
@@ -2080,35 +2117,28 @@ Kinetic.Shape.prototype = {
          * Also need to implement getHeight and getWidth methods for each Shape
          * object
         */
-        var m= this.getAbsoluteTransform();
-        //find transformed corners and bounding box
-        var w=this.getWidth();var h=this.getHeight();
-        var p1 = m.multiplyPoint(0,0);
-        var p2 = m.multiplyPoint(w,0);
-        var p3 = m.multiplyPoint(0,h);
-        var p4 = m.multiplyPoint(w,h);
-        var x1=Math.floor(Math.min(p1.x,p2.x,p3.x,p4.x));
-        var x2=Math.floor(Math.max(p1.x,p2.x,p3.x,p4.x));
-        var y1=Math.floor(Math.min(p1.y,p2.y,p3.y,p4.y));
-        var y2=Math.floor(Math.max(p1.y,p2.y,p3.y,p4.y));
-        w=x2-x1
-        h=y2-y1;
-        
+        var box=this.getAbsoluteBBox();
+        var x=box.x|0;
+        var y=box.y|0;
+        var w=box.width|0;
+        var h=box.height|0;
 		this.data = {
             imageData:[],
-            x:x1,
-            y:y1
+            x:x,
+            y:y
         }; 
-        //for performance we get only needed imagedata http://jsperf.com/getimagedata-performance/3
-        var imageData = bufferLayerContext.getImageData(x1, y1, w , h);
         
-        //minimize image data array
+        //for performance and memory usage we get only needed imagedata http://jsperf.com/getimagedata-performance/3
+        var imageData = bufferLayerContext.getImageData(x, y, w, h);
+        
+        //minimize image data array for memory usage
         var pix = imageData.data;
         for (var i = 0, n = pix.length; i < n; i += 4) {
             //OPTIMIZE: math.floor vs bitwise http://jsperf.com/math-floor-vs-bitwise
-            //var row=~~((i/4)/width);
+            //http://jsperf.com/math-floor-vs-math-round-vs-parseint/36
             //Maybe use bitwise
-            var row = Math.floor((i / 4) / w);
+            //var row = Math.floor((i / 4) / w);
+            var row = (i / 4) / w | 0;
             if(!this.data.imageData[row])
                 this.data.imageData[row]=[];
             var column = (i / 4) - (row * w);
@@ -2166,10 +2196,7 @@ Kinetic.Shape.prototype = {
         else {
             var x=pos.x-this.data.x;
             var y=pos.y-this.data.y;
-            if(this.data.imageData[y]){
-            	return this.data.imageData[y][x]; 
-            }
-            else return false;
+            return this.data.imageData && this.data.imageData[y] && this.data.imageData[y][x];
         }
     }
 };
@@ -2282,12 +2309,26 @@ Kinetic.Circle.prototype = {
      */
     setRadius: function(radius) {
         this.radius = radius;
+        this._resetSize();
     },
     /**
      * get radius
      */
     getRadius: function() {
         return this.radius;
+    },
+    /**
+     * return circle shape box
+     */
+    getBBox: function() {
+        if(!this.width && !this.height)
+            this.width = this.height = this.radius * 2;
+        return {
+            x: this.x - this.radius,
+            y: this.y - this.radius,
+            width: this.width,
+            height: this.height
+        };
     }
 };
 
@@ -2424,13 +2465,40 @@ Kinetic.Polygon.prototype = {
      */
     setPoints: function(points) {
         this.points = points;
+        this._resetSize();
     },
     /**
      * get points array
      */
     getPoints: function() {
         return this.points;
+    },
+    /**
+     * return polygon shape box
+     */
+    getBBox: function() {
+        var l=this.points.length,
+        X=[], Y=[], xmin, ymin, xmax, ymax;
+        for(var i=0;i<l;i++){
+            X.push(this.points[i].x);
+            Y.push(this.points[i].y);
+        }
+        xmin=Math.min.apply(0,X);
+        xmax=Math.max.apply(0,X);
+        ymin=Math.min.apply(0,Y);
+        ymax=Math.max.apply(0,Y);     
+        if(!this.width && !this.height){
+            this.width=xmax-xmin;
+            this.height=ymax-ymin;
+        }
+        return {
+            x: xmin + this.x,
+            y: ymin + this.y,
+            width: this.width,
+            height: this.height
+        };
     }
+    
 };
 
 // extend Shape
@@ -2486,6 +2554,7 @@ Kinetic.RegularPolygon.prototype = {
      */
     setRadius: function(radius) {
         this.radius = radius;
+        this._resetSize();
     },
     /**
      * get radius
@@ -2505,6 +2574,19 @@ Kinetic.RegularPolygon.prototype = {
      */
     getSides: function() {
         return this.sides;
+    },
+    /**
+     * return regularpolygon shape box
+     */
+    getBBox: function() {
+        if(!this.width && !this.height)
+            this.width = this.height = this.radius * 2;
+        return {
+            x: this.x - this.radius,
+            y: this.y - this.radius,
+            width: this.width,
+            height: this.height
+        };
     }
 };
 
@@ -2562,6 +2644,7 @@ Kinetic.Star.prototype = {
      */
     setOuterRadius: function(radius) {
         this.outerRadius = radius;
+        this._resetSize();
     },
     /**
      * get outer radius
@@ -2581,6 +2664,19 @@ Kinetic.Star.prototype = {
      */
     getInnerRadius: function() {
         return this.innerRadius;
+    },
+    /**
+     * return star shape box
+     */
+    getBBox: function() {
+        if(!this.width && !this.height)
+            this.width = this.height = this.outerRadius * 2;
+        return {
+            x: this.x - this.outerRadius,
+            y: this.y - this.outerRadius,
+            width: this.width,
+            height: this.height
+        };
     }
 };
 // extend Shape
@@ -2691,6 +2787,7 @@ Kinetic.Text.prototype = {
      */
     setFontFamily: function(fontFamily) {
         this.fontFamily = fontFamily;
+        this._resetSize();
     },
     /**
      * get font family
@@ -2704,6 +2801,7 @@ Kinetic.Text.prototype = {
      */
     setFontSize: function(fontSize) {
         this.fontSize = fontSize;
+        this._resetSize();
     },
     /**
      * get font size
@@ -2717,6 +2815,7 @@ Kinetic.Text.prototype = {
      */
     setFontStyle: function(fontStyle) {
         this.fontStyle = fontStyle;
+        this._resetSize();
     },
     /**
      * get font style
@@ -2808,6 +2907,7 @@ Kinetic.Text.prototype = {
      */
     setText: function(text) {
         this.text = text;
+        this._resetSize();
     },
     /**
      * get text
@@ -2839,6 +2939,20 @@ Kinetic.Text.prototype = {
         return {
             width: metrics.width,
             height: parseInt(this.fontSize, 10)
+        };
+    },
+    /**
+     * return text shape size
+     */
+    getSize: function() {
+        if(!this.width && !this.height){
+            var size=this.getTextSize();
+            this.width = size.width; 
+            this.height = size.height;
+        }   
+        return {
+            width: this.width,
+            height: this.height
         };
     }
 };
@@ -2963,6 +3077,24 @@ Kinetic.Transform.prototype = {
 		    x: this.m[0] * x + this.m[2] * y + this.m[4], 
 		    y: this.m[1] * x + this.m[3] * y + this.m[5]
 		}; 
+	},
+	/**
+     * Multiply a bound area (x, y, w, h) 
+     * @param {Object} bounds  {x:, y:, width:, height:}
+     * @returns {Object} bounds {x:, y:, width:, height:} 
+     */
+	multiplyBounds: function(bounds) {
+	  var pt1 = this.multiplyPoint(bounds.x, bounds.y);
+	  var pt2 = this.multiplyPoint(bounds.x + bounds.width, bounds.y);
+	  var pt3 = this.multiplyPoint(bounds.x, bounds.y + bounds.height);
+	  var pt4 = this.multiplyPoint(bounds.x + bounds.width, bounds.y + bounds.height);
+	  
+	  var xmin = Math.min(pt1.x, pt2.x, pt3.x, pt4.x);
+	  var ymin = Math.min(pt1.y, pt2.y, pt3.y, pt4.y);
+	  var xmax = Math.max(pt1.x, pt2.x, pt3.x, pt4.x);
+	  var ymax = Math.max(pt1.y, pt2.y, pt3.y, pt4.y);
+	  
+	  return {x: xmin, y:ymin, width: xmax - xmin, height: ymax - ymin};
 	},
     /**
      * return matrix

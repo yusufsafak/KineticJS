@@ -535,11 +535,23 @@ Test.prototype.tests = {
             var darth = new Kinetic.Image({
                 x: 200,
                 y: 40,
+                rotationDeg: 20,
+                centerOffset: {
+                    x: 50,
+                    y: 40
+                },
                 image: imageObj,
-                detectionType: 'pixel',
+                //detectionType: 'pixel',
                 draggable: true
             });
-
+            var box=darth.getAbsoluteBBox();
+            var rect = new Kinetic.Rect({
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height,
+                stroke: 'black'
+            });
             darth.on('mouseover', function() {
                 log('mouseover');
             });
@@ -549,9 +561,13 @@ Test.prototype.tests = {
             });
 
             darth.on('dragend', function() {
-                this.save();
+                /*this.save();
+                var box=this.getAbsoluteBBox();
+                rect.setPosition(box.x,box.y);
+                rect.setSize(box.width,box.height);
+                layer.draw();*/
             });
-
+            layer.add(rect);
             layer.add(darth);
             stage.add(layer);
 
@@ -571,19 +587,31 @@ Test.prototype.tests = {
             var layer = new Kinetic.Layer({
                 rotationDeg: 20
             });
+            
             var star = new Kinetic.Star({
                 x: 200,
                 y: 100,
                 points: 10,
                 innerRadius: 40,
-                outerRadius: 70,
+                outerRadius: 60,
                 fill: 'green',
                 stroke: 'blue',
-                strokeWidth: 20,
+                //strokeWidth: 20,
                 detectionType: 'pixel',
+                centerOffset: {
+                    x: 50,
+                    y: 40
+                },
                 draggable: true
             });
-
+            var box=star.getAbsoluteBBox();
+            var rect = new Kinetic.Rect({
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height,
+                stroke: 'black'
+            });
             star.on('mouseover', function() {
                 log('mouseover');
             });
@@ -594,12 +622,95 @@ Test.prototype.tests = {
 
             star.on('dragend', function() {
                 this.save();
+                var box=this.getAbsoluteBBox();
+                rect.setPosition(box.x,box.y);
+                rect.setSize(box.width,box.height);
+                layer.draw();
             });
-
+            layer.add(rect);
             layer.add(star);
             stage.add(layer);
 
             star.save();
+        };
+        imageObj.src = '../lion.png';
+    },
+    'EVENTS - polygon pixel detection': function(containerId) {
+        var imageObj = new Image();
+        imageObj.onload = function() {
+            var stage = new Kinetic.Stage({
+                container: containerId,
+                width: 578,
+                height: 400
+            });
+
+            var layer = new Kinetic.Layer({
+                //rotationDeg: 20
+            });
+            var points = [{
+                x: 73,
+                y: 192
+            }, {
+                x: 73,
+                y: 160
+            }, {
+                x: 340,
+                y: 23
+            }, {
+                x: 500,
+                y: 109
+            }, {
+                x: 499,
+                y: 139
+            }, {
+                x: 342,
+                y: 93
+            }];
+
+            var poly = new Kinetic.Polygon({
+                points: points,
+                fill: 'green',
+                stroke: 'blue',
+                strokeWidth: 5,
+                detectionType: 'pixel',
+                draggable: true,
+                rotation: 50,
+                /*centerOffset: {
+                    x: 300,
+                    y: 100
+                }*/
+            });
+            var box=poly.getAbsoluteBBox();
+            var rect = new Kinetic.Rect({
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height,
+                stroke: 'black'
+            });
+            
+
+            poly.on('mouseover', function() {
+                log('mouseover');
+            });
+
+            poly.on('mouseout', function() {
+                log('mouseout');
+            });
+
+            poly.on('dragend', function() {
+                this.save();
+                var box=this.getAbsoluteBBox();
+                rect.setPosition(box.x,box.y);
+                rect.setSize(box.width,box.height);
+                layer.draw();
+            });
+            
+            layer.add(rect);
+            layer.add(poly);
+            stage.add(layer);
+            
+            poly.save();
         };
         imageObj.src = '../lion.png';
     },
